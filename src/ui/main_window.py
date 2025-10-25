@@ -67,28 +67,22 @@ class GameScreen(QWidget):
 
     def update_screen(self, screen_data: list):
         """Update the screen with new frame data."""
+        self.logger.debug(f"GameScreen update_screen called with {len(screen_data)} lines")
         if len(screen_data) == Config.DISPLAY_HEIGHT:
             for y in range(Config.DISPLAY_HEIGHT):
                 if len(screen_data[y]) == Config.DISPLAY_WIDTH:
                     self.screen_buffer[y] = screen_data[y][:]
+                    self.logger.debug(f"Updated line {y} with {len(screen_data[y])} pixels")
         self.update()
 
     def paintEvent(self, event):
         """Paint the Gameboy screen."""
+        self.logger.debug("GameScreen paintEvent called")
         painter = QPainter(self)
 
-        if self.pygame_surface:
-            # Use Pygame rendering
-            self._render_with_pygame()
-            # Convert pygame surface to QImage
-            pygame_image = self.pygame_surface
-            image_data = pygame.image.tostring(pygame_image, 'RGB')
-            qimage = QImage(image_data, Config.DISPLAY_WIDTH, Config.DISPLAY_HEIGHT,
-                          QImage.Format_RGB888)
-            painter.drawImage(0, 0, qimage)
-        else:
-            # Use Qt rendering
-            self._render_with_qt(painter)
+        # Use Qt rendering (more reliable)
+        self._render_with_qt(painter)
+        self.logger.debug("Painted using Qt rendering")
 
     def _render_with_pygame(self):
         """Render using Pygame."""
@@ -108,10 +102,15 @@ class GameScreen(QWidget):
     def _render_with_qt(self, painter: QPainter):
         """Render using Qt."""
         # Draw each pixel
+        pixels_drawn = 0
         for y in range(Config.DISPLAY_HEIGHT):
             for x in range(Config.DISPLAY_WIDTH):
                 color_index = self.screen_buffer[y][x]
-                color = Config.PALETTE[color_index % len(Config.PALETTE)]
+                color_tuple = Config.PALETTE[color_index % len(Config.PALETTE)]
+
+                # Create QColor from RGB tuple
+                from PyQt5.QtGui import QColor
+                color = QColor(*color_tuple)
 
                 # Draw pixel
                 painter.fillRect(
@@ -119,6 +118,9 @@ class GameScreen(QWidget):
                     Config.SCALE_FACTOR, Config.SCALE_FACTOR,
                     color
                 )
+                pixels_drawn += 1
+
+        self.logger.debug(f"Rendered {pixels_drawn} pixels using Qt")
 
     def keyPressEvent(self, event: QKeyEvent):
         """Handle key press events."""
@@ -134,9 +136,10 @@ class GameScreen(QWidget):
 class ControlPanel(QWidget):
     """Control panel with emulator controls."""
 
-    def __init__(self):
+    def __init__(self, main_window=None):
         """Initialize the control panel."""
         super().__init__()
+        self.main_window = main_window
         self.logger = logging.getLogger(__name__)
 
         self.setup_ui()
@@ -153,21 +156,21 @@ class ControlPanel(QWidget):
         buttons_layout = QHBoxLayout()
 
         self.play_button = QPushButton("Play")
-        self.play_button.clicked.connect(self.on_play_clicked)
+        self.play_button.clicked.connect(self._on_play_clicked)
         buttons_layout.addWidget(self.play_button)
 
         self.pause_button = QPushButton("Pause")
-        self.pause_button.clicked.connect(self.on_pause_clicked)
+        self.pause_button.clicked.connect(self._on_pause_clicked)
         self.pause_button.setEnabled(False)
         buttons_layout.addWidget(self.pause_button)
 
         self.stop_button = QPushButton("Stop")
-        self.stop_button.clicked.connect(self.on_stop_clicked)
+        self.stop_button.clicked.connect(self._on_stop_clicked)
         self.stop_button.setEnabled(False)
         buttons_layout.addWidget(self.stop_button)
 
         self.reset_button = QPushButton("Reset")
-        self.reset_button.clicked.connect(self.on_reset_clicked)
+        self.reset_button.clicked.connect(self._on_reset_clicked)
         self.reset_button.setEnabled(False)
         buttons_layout.addWidget(self.reset_button)
 
@@ -220,29 +223,30 @@ class ControlPanel(QWidget):
         # Stretch to fill available space
         layout.addStretch()
 
-    def on_play_clicked(self):
-        """Handle play button click."""
-        self.play_button.setEnabled(False)
-        self.pause_button.setEnabled(True)
-        self.stop_button.setEnabled(True)
-        self.reset_button.setEnabled(True)
+    def _on_play_clicked(self):
+        """Handle play button click - delegate to MainWindow."""
+        if self.main_window:
+            self.main_window.on_play()
 
-    def on_pause_clicked(self):
-        """Handle pause button click."""
-        self.play_button.setEnabled(True)
-        self.pause_button.setEnabled(False)
+    def _on_pause_clicked(self):
+        """Handle pause button click - delegate to MainWindow."""
+        if self.main_window:
+            self.main_window.on_pause()
 
-    def on_stop_clicked(self):
-        """Handle stop button click."""
-        self.play_button.setEnabled(True)
-        self.pause_button.setEnabled(False)
-        self.stop_button.setEnabled(False)
-        self.reset_button.setEnabled(False)
+    def _on_stop_clicked(self):
+        """Handle stop button click - delegate to MainWindow."""
+        if self.main_window:
+            self.main_window.on_stop()
 
-    def on_reset_clicked(self):
-        """Handle reset button click."""
-        # This will be connected to emulator reset
-        pass
+    def _on_reset_clicked(self):
+        """Handle reset button click - delegate to MainWindow."""
+        if self.main_window:
+            self.main_window.on_reset()
+
+    def _on_test_clicked(self):
+        """Handle test button click - delegate to MainWindow."""
+        if self.main_window:
+            self.main_window.on_test_clicked()
 
     def on_speed_changed(self, value: int):
         """Handle speed slider change."""
@@ -256,14 +260,17 @@ class ControlPanel(QWidget):
     def update_status(self, status: str):
         """Update status label."""
         self.status_label.setText(status)
+        self.logger.debug(f"Updated status: {status}")
 
     def update_frame_count(self, frames: int):
         """Update frame counter."""
         self.frame_label.setText(f"Frames: {frames}")
+        self.logger.debug(f"Updated frame count: {frames}")
 
     def update_cycle_count(self, cycles: int):
         """Update cycle counter."""
         self.cycle_label.setText(f"Cycles: {cycles:,}")
+        self.logger.debug(f"Updated cycle count: {cycles}")
 
 
 class MainWindow(QMainWindow):
@@ -285,6 +292,7 @@ class MainWindow(QMainWindow):
         # Emulation timer
         self.emulation_timer = QTimer()
         self.emulation_timer.timeout.connect(self.on_emulation_tick)
+        self.logger.info(f"Emulation timer created and connected: {self.emulation_timer.isActive()}")
 
         # Setup UI
         self.setup_ui()
@@ -316,7 +324,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.game_screen, 1)
 
         # Control panel (right side)
-        self.control_panel = ControlPanel()
+        self.control_panel = ControlPanel(self)
         main_layout.addWidget(self.control_panel, 0)
 
     def setup_menus(self):
@@ -402,7 +410,7 @@ class MainWindow(QMainWindow):
             if success:
                 self.status_bar.showMessage(f"ROM loaded: {os.path.basename(rom_path)}")
                 self.control_panel.update_status("ROM loaded")
-                self.control_panel.reset_button.setEnabled(True)
+                self.control_panel.reset_button.setEnabled(True)  # Enable reset button when ROM is loaded
             else:
                 self.status_bar.showMessage("Failed to load ROM")
                 self.control_panel.update_status("Failed to load ROM")
@@ -413,20 +421,50 @@ class MainWindow(QMainWindow):
 
     def on_play(self):
         """Handle play action."""
+        self.logger.info(f"Play button pressed - Emulator running: {self.emulator.running}, paused: {self.emulator.paused}")
+
         if not self.emulator.running:
+            self.logger.info("Starting emulator...")
             self.emulator.resume()
-            self.control_panel.on_play_clicked()
+
+            # Update button states in ControlPanel
+            self.control_panel.play_button.setEnabled(False)
+            self.control_panel.pause_button.setEnabled(True)
+            self.control_panel.stop_button.setEnabled(True)
+            self.control_panel.reset_button.setEnabled(True)
+
             self.status_bar.showMessage("Emulator running")
             self.control_panel.update_status("Running")
 
             # Start emulation timer
+            self.logger.info(f"Starting emulation timer (active: {self.emulation_timer.isActive()})...")
             self.emulation_timer.start(16)  # ~60 FPS
+            self.logger.info(f"Emulation timer started (active: {self.emulation_timer.isActive()})")
+
+            # Force initial state update
+            state = self.emulator.get_state()
+            self.signals.state_changed.emit(state)
+
+            # Force immediate frame execution to test
+            self.logger.info("Forcing immediate frame execution for testing...")
+            self._force_frame_execution()
+
+            # Verify emulator is running after 1 second
+            QTimer.singleShot(1000, self._verify_emulation_running)
+        else:
+            self.logger.info("Emulator already running")
 
     def on_pause(self):
         """Handle pause action."""
         if self.emulator.running:
             self.emulator.pause()
-            self.control_panel.on_pause_clicked()
+
+            # Update button states
+            self.control_panel.play_button.setEnabled(True)
+            self.control_panel.pause_button.setEnabled(False)
+            self.control_panel.stop_button.setEnabled(True)
+            self.control_panel.reset_button.setEnabled(True)
+
             self.status_bar.showMessage("Emulator paused")
             self.control_panel.update_status("Paused")
 
@@ -436,7 +474,13 @@ class MainWindow(QMainWindow):
     def on_stop(self):
         """Handle stop action."""
         self.emulator.stop()
-        self.control_panel.on_stop_clicked()
+
+        # Update button states
+        self.control_panel.play_button.setEnabled(True)
+        self.control_panel.pause_button.setEnabled(False)
+        self.control_panel.stop_button.setEnabled(False)
+        self.control_panel.reset_button.setEnabled(True)
+
         self.status_bar.showMessage("Emulator stopped")
         self.control_panel.update_status("Stopped")
 
@@ -446,6 +490,13 @@ class MainWindow(QMainWindow):
     def on_reset(self):
         """Handle reset action."""
         self.emulator.reset()
+
+        # Update button states
+        self.control_panel.play_button.setEnabled(True)
+        self.control_panel.pause_button.setEnabled(False)
+        self.control_panel.stop_button.setEnabled(False)
+        self.control_panel.reset_button.setEnabled(False)
+
         self.status_bar.showMessage("Emulator reset")
         self.control_panel.update_status("Reset")
 
@@ -456,12 +507,16 @@ class MainWindow(QMainWindow):
 
     def on_emulation_tick(self):
         """Handle emulation timer tick."""
+        self.logger.debug("Emulation tick started")
         try:
             # Run one frame
-            self.emulator.run_frame()
+            self.logger.debug(f"Calling emulator.run_frame() - running: {self.emulator.running}, paused: {self.emulator.paused}")
+            result = self.emulator.run_frame()
+            self.logger.debug(f"run_frame() returned: {result}")
 
             # Update UI
             state = self.emulator.get_state()
+            self.logger.debug(f"Emulator state: {state}")
             self.signals.state_changed.emit(state)
 
         except Exception as e:
@@ -478,6 +533,7 @@ class MainWindow(QMainWindow):
 
     def on_state_changed(self, state: dict):
         """Handle state change signal."""
+        self.logger.debug(f"State changed: {state}")
         self.control_panel.update_frame_count(state.get('frame_count', 0))
         self.control_panel.update_cycle_count(state.get('cycle_count', 0))
 
@@ -536,7 +592,78 @@ class MainWindow(QMainWindow):
         else:
             super().keyReleaseEvent(event)
 
-    def closeEvent(self, event):
-        """Handle window close event."""
-        self.on_stop()
-        event.accept()
+    def _force_frame_execution(self):
+        """Force immediate frame execution for testing."""
+        self.logger.info("Forcing frame execution...")
+        try:
+            # First try to run a frame
+            result = self.emulator.run_frame()
+            self.logger.info(f"Forced frame execution result: {result}")
+
+            # Update UI immediately
+            state = self.emulator.get_state()
+            self.signals.state_changed.emit(state)
+            self.logger.info(f"After forced execution - State: {state}")
+
+            # If no frames were generated, try to force LCD on and generate test pattern
+            if state['frame_count'] == 0:
+                self.logger.warning("No frames generated, forcing LCD on and test pattern...")
+                self.emulator.force_test_pattern()
+
+                # Try running another frame
+                result = self.emulator.run_frame()
+                state = self.emulator.get_state()
+                self.signals.state_changed.emit(state)
+                self.logger.info(f"After test pattern - Result: {result}, State: {state}")
+
+        except Exception as e:
+            self.logger.error(f"Error in forced frame execution: {e}")
+
+    def _verify_emulation_running(self):
+        """Verify that emulation is running correctly."""
+        state = self.emulator.get_state()
+        self.logger.info(f"Emulation verification - Timer active: {self.emulation_timer.isActive()}, "
+                        f"Emulator running: {state['running']}, Frame count: {state['frame_count']}, "
+                        f"PC: {state['pc']}, SP: {state['sp']}")
+
+        if state['frame_count'] == 0:
+            self.logger.warning("No frames executed! Forcing frame execution...")
+            # Force a frame execution
+            self.emulator.run_frame()
+            state = self.emulator.get_state()
+            self.signals.state_changed.emit(state)
+            self.logger.info(f"After forced execution - Frame count: {state['frame_count']}")
+
+            # If still no frames, try test pattern
+            if state['frame_count'] == 0:
+                self.logger.warning("Still no frames! Forcing test pattern...")
+                self.emulator.force_test_pattern()
+                self.emulator.run_frame()
+                state = self.emulator.get_state()
+                self.signals.state_changed.emit(state)
+                self.logger.info(f"After test pattern - Frame count: {state['frame_count']}")
+
+    def on_test_clicked(self):
+        """Handle test button click."""
+        self.logger.info("Test button clicked - manual frame execution")
+        try:
+            # Force test pattern
+            self.emulator.force_test_pattern()
+
+            # Run a frame
+            result = self.emulator.run_frame()
+            self.logger.info(f"Test frame result: {result}")
+
+            # Update UI
+            state = self.emulator.get_state()
+            self.signals.state_changed.emit(state)
+
+            # Force screen update
+            if self.game_screen:
+                self.game_screen.update()
+
+            self.logger.info(f"Test completed - State: {state}")
+
+        except Exception as e:
+            self.logger.error(f"Test error: {e}")
+            QMessageBox.critical(self, "Test Error", f"Test failed:\n{str(e)}")

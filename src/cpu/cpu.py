@@ -188,6 +188,7 @@ class CPU:
             return 4  # NOP cycles when halted
 
         # Fetch opcode
+        pc_before = self.registers.pc
         self.current_opcode = self.memory.read_byte(self.registers.pc)
 
         # Execute instruction
@@ -196,6 +197,12 @@ class CPU:
         # Update program counter
         self.registers.pc += self._get_instruction_length()
         self.registers.cycles += cycles
+
+        # Log every instruction for debugging (less frequent to avoid spam)
+        if self.logger.isEnabledFor(logging.DEBUG) and self.registers.cycles % 100000 == 0:
+            self.logger.debug(f"CPU: 0x{pc_before:04X} -> 0x{self.registers.pc:04X}, "
+                            f"opcode: 0x{self.current_opcode:02X}, cycles: {cycles}, "
+                            f"A:0x{self.registers.a:02X} B:0x{self.registers.b:02X} C:0x{self.registers.c:02X}")
 
         return cycles
 

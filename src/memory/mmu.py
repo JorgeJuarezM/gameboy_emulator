@@ -15,13 +15,15 @@ class Memory:
         """Initialize the memory system."""
         self.logger = logging.getLogger(__name__)
 
-        # Memory banks
-        self.rom = [0] * (32 * 1024)  # 32KB ROM (2 banks of 16KB each)
+        # Memory banks - expanded ROM support for larger cartridges
+        self.rom = [0] * (2 * 1024 * 1024)  # 2MB ROM (supports up to MBC5)
         self.wram = [0] * (8 * 1024)  # 8KB Work RAM
         self.vram = [0] * (8 * 1024)  # 8KB Video RAM
         self.oam = [0] * 160         # 160 bytes Object Attribute Memory
         self.hram = [0] * 127        # 127 bytes High RAM
-        self.io = [0] * 256          # I/O registers (0xFF00-0xFF7F)
+        # I/O registers (0xFF00-0xFF7F) + IE register (0xFFFF)
+        self.io = [0] * 128          # I/O registers (0xFF00-0xFF7F)
+        self.ie_register = 0x00      # Interrupt Enable register (0xFFFF)
 
         # Boot ROM (256 bytes)
         self.boot_rom = None
@@ -57,7 +59,7 @@ class Memory:
 
         # Interrupt flags and enable
         self.io[0x0F] = 0xE1  # IF
-        self.io[0xFF] = 0x00  # IE
+        # IE register is handled separately as self.ie_register
 
         # Audio registers
         self.io[0x10] = 0x80  # NR10
@@ -95,12 +97,21 @@ class Memory:
 
     def load_rom(self, rom_data: bytes):
         """Load a game ROM."""
+        self.logger.info(f"Loading ROM with {len(rom_data)} bytes")
         if len(rom_data) < 0x8000:  # At least 32KB
             raise ValueError("ROM too small")
 
-        # Copy first 32KB to ROM banks
-        for i in range(min(len(rom_data), 32 * 1024)):
-            self.rom[i] = rom_data[i]
+        # Copy entire ROM (up to 2MB)
+        rom_size = min(len(rom_data), 2 * 1024 * 1024)
+        self.logger.info(f"Copying {rom_size} bytes to ROM array of size {len(self.rom)}")
+
+        try:
+            for i in range(rom_size):
+                self.rom[i] = rom_data[i]
+            self.logger.info(f"Successfully copied ROM data")
+        except Exception as e:
+            self.logger.error(f"Error copying ROM data at index {i}: {e}")
+            raise
 
         # Check cartridge header for MBC type
         self._detect_mbc_type(rom_data)
@@ -166,7 +177,7 @@ class Memory:
             return self.hram[address - 0xFF80]
         elif address == 0xFFFF:
             # Interrupt Enable register
-            return self.io[0xFF]
+            return self.ie_register
         else:
             self.logger.warning(f"Reading from invalid address: 0x{address:04X}")
             return 0xFF
@@ -213,7 +224,7 @@ class Memory:
             self.hram[address - 0xFF80] = value
         elif address == 0xFFFF:
             # Interrupt Enable register
-            self.io[0xFF] = value
+            self.ie_register = value
         else:
             self.logger.warning(f"Writing to invalid address: 0x{address:04X} = 0x{value:02X}")
 
@@ -310,7 +321,11 @@ class Memory:
     def get_io_register(self, address: int) -> int:
         """Get I/O register value."""
         if 0xFF00 <= address <= 0xFF7F:
-            return self.io[address - 0xFF00]
+            value = self.io[address - 0xFF00]
+            # Log important registers
+            if address in [0xFF40, 0xFF44, 0xFF00, 0xFF0F]:
+                self.logger.debug(f"Reading I/O register 0x{address:04X} = 0x{value:02X}")
+            return value
         return 0
 
     def set_io_register(self, address: int, value: int):
@@ -320,12 +335,13 @@ class Memory:
 
     def reset(self):
         """Reset the memory system."""
-        self.rom = [0] * (32 * 1024)
+        self.rom = [0] * (2 * 1024 * 1024)  # 2MB ROM (supports up to MBC5)
         self.wram = [0] * (8 * 1024)
         self.vram = [0] * (8 * 1024)
         self.oam = [0] * 160
         self.hram = [0] * 127
-        self.io = [0] * 128
+        self.io = [0] * 128          # I/O registers (0xFF00-0xFF7F)
+        self.ie_register = 0x00      # Interrupt Enable register (0xFFFF)
 
         self.boot_rom = None
         self.boot_rom_enabled = True

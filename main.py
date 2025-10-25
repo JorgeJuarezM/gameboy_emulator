@@ -16,8 +16,18 @@ def main():
     # Configure logging
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # Log to console
+            logging.FileHandler('emulator.log')  # Also log to file
+        ]
     )
+
+    # Set specific loggers to DEBUG level
+    logging.getLogger('src.core.emulator').setLevel(logging.DEBUG)
+    logging.getLogger('src.gpu.ppu').setLevel(logging.DEBUG)
+    logging.getLogger('src.ui.main_window').setLevel(logging.DEBUG)
+    logging.getLogger('src.cpu.cpu').setLevel(logging.DEBUG)
 
     # Create Qt application
     app = QApplication(sys.argv)

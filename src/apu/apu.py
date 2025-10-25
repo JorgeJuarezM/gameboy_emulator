@@ -266,6 +266,13 @@ class NoiseChannel(AudioChannel):
         self.lfsr_width = 0  # 7 or 15 bits
         self.clock_divisor = 0
 
+        # Volume envelope (same as pulse channels)
+        self.envelope_enabled = False
+        self.envelope_direction = 0  # 0=decrease, 1=increase
+        self.envelope_period = 0
+        self.envelope_timer = 0
+        self.envelope_volume = 0
+
     def step(self, cycles: int) -> float:
         """Generate noise sample."""
         if not self.enabled:

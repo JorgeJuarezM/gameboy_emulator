@@ -103,7 +103,7 @@ def test_instructions():
     # Execute instruction
     cycles = cpu.step()
     assert cycles > 0, "Instruction execution failed"
-    assert cpu.registers.a == 0x42, f"Expected A=0x42, got A=0x{cpu.registers.a"02X"}"
+    assert cpu.registers.a == 0x42, f"Expected A=0x42, got A=0x{cpu.registers.a:02X}"
 
     print("✓ Instruction tests passed")
 

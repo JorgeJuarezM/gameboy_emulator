@@ -68,14 +68,18 @@ class PPU:
         self.window_x = 0
         self.window_y = 0
         self._update_control_flags()
-        self.logger.info("PPU reset")
+        self.logger.info(f"PPU reset - LCD enabled: {self.lcd_enabled}, BG enabled: {self.bg_enabled}, "
+                        f"LCDC: 0x{self.memory.get_io_register(0xFF40):02X}")
 
     def step(self, cycles: int):
         """Update PPU for given number of cycles."""
         # Update control flags from LCDC register
         self._update_control_flags()
 
+        self.logger.debug(f"PPU step - LCD enabled: {self.lcd_enabled}, mode: {self.mode}, line: {self.line}, cycles: {cycles}")
+
         if not self.lcd_enabled:
+            self.logger.debug("PPU step returning - LCD not enabled")
             return
 
         self.mode_clock += cycles
@@ -92,7 +96,9 @@ class PPU:
                     self._request_vblank_interrupt()
                     if self.frame_callback:
                         self.frame_callback(self.frame_buffer)
-                        self.logger.debug(f"Frame completed: {self.frame_callback}")
+                        self.logger.debug(f"Frame completed via callback: {self.frame_callback}")
+                    else:
+                        self.logger.debug("No frame callback set!")
                 else:
                     # Enter OAM scan
                     self.mode = 2
@@ -123,12 +129,18 @@ class PPU:
 
     def _update_control_flags(self):
         """Update control flags from LCDC register."""
-        lcdc = self.memory.get_io_register(0xFF40)
+        try:
+            lcdc = self.memory.get_io_register(0xFF40)
+            self.logger.debug(f"LCDC register: 0x{lcdc:02X}")
 
-        self.lcd_enabled = bool(lcdc & 0x80)
-        self.window_enabled = bool(lcdc & 0x20)
-        self.obj_enabled = bool(lcdc & 0x02)
-        self.bg_enabled = bool(lcdc & 0x01)
+            self.lcd_enabled = bool(lcdc & 0x80)
+            self.window_enabled = bool(lcdc & 0x20)
+            self.obj_enabled = bool(lcdc & 0x02)
+            self.bg_enabled = bool(lcdc & 0x01)
+
+            self.logger.debug(f"PPU flags - LCD: {self.lcd_enabled}, BG: {self.bg_enabled}, Window: {self.window_enabled}, OBJ: {self.obj_enabled}")
+        except Exception as e:
+            self.logger.error(f"Error updating control flags: {e}")
 
     def _render_scanline(self, line: int):
         """Render a single scanline."""
@@ -385,4 +397,5 @@ class PPU:
 
     def set_frame_callback(self, callback):
         """Set callback function for when frame is complete."""
+        self.logger.info(f"PPU setting frame callback: {callback}")
         self.frame_callback = callback

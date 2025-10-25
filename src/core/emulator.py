@@ -49,7 +49,7 @@ class InterruptHandler:
 
     def get_enabled_interrupts(self) -> int:
         """Get enabled interrupts from IE register."""
-        return self.memory.io[0xFF]
+        return self.memory.ie_register
 
     def get_interrupt_flags(self) -> int:
         """Get interrupt flags from IF register."""
@@ -175,16 +175,27 @@ class GameboyEmulator:
 
         # Connect PPU to frame callback
         self.ppu.set_frame_callback(self._on_frame_complete)
+        self.logger.info(f"Emulator initialized - PPU callback connected: {self.ppu.frame_callback is not None}")
 
         self.logger.info("Gameboy emulator initialized")
 
     def load_rom(self, rom_path: str) -> bool:
         """Load a ROM file."""
+        self.logger.info(f"Loading ROM: {rom_path}")
         try:
             with open(rom_path, 'rb') as f:
                 rom_data = f.read()
+            self.logger.info(f"Read {len(rom_data)} bytes from ROM file")
 
+            # Reset emulator state first
+            self.logger.info("Calling reset()...")
+            self.reset()
+            self.logger.info("Reset completed")
+
+            # Load ROM into memory after reset
+            self.logger.info("Calling memory.load_rom()...")
             self.memory.load_rom(rom_data)
+            self.logger.info("ROM loaded into memory")
 
             # Load boot ROM if available
             boot_rom_path = rom_path.replace('.gb', '_boot.gb')
@@ -198,15 +209,33 @@ class GameboyEmulator:
             self.cpu.registers.sp = 0xFFFE  # Stack pointer at top of RAM
             self.cpu.ime = False            # Interrupts initially disabled
 
+            # Log initial state
+            self.logger.info(f"ROM loaded successfully - PC: 0x{self.cpu.registers.pc:04X}, SP: 0x{self.cpu.registers.sp:04X}")
+            self.logger.info(f"LCDC: 0x{self.memory.get_io_register(0xFF40):02X}")
+            self.logger.info(f"Initial CPU state: A=0x{self.cpu.registers.a:02X}, B=0x{self.cpu.registers.b:02X}, C=0x{self.cpu.registers.c:02X}")
+
+            # Verify LCD status
+            lcdc = self.memory.get_io_register(0xFF40)
+            lcd_enabled = bool(lcdc & 0x80)
+            bg_enabled = bool(lcdc & 0x01)
+            self.logger.info(f"LCD Status - LCD enabled: {lcd_enabled}, BG enabled: {bg_enabled}, LCDC: 0x{lcdc:02X}")
+
+            # Check PPU state
+            ppu_state = self.ppu.get_lcd_status()
+            self.logger.info(f"PPU Status - Mode: {ppu_state['mode']}, Line: {ppu_state['line']}, LCD enabled: {self.ppu.lcd_enabled}")
+
             self.logger.info(f"ROM loaded: {rom_path}")
             return True
 
         except Exception as e:
             self.logger.error(f"Failed to load ROM: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     def reset(self):
         """Reset the emulator."""
+        self.logger.info("Resetting emulator...")
         self.memory.reset()
         self.cpu.reset()
         self.ppu.reset()
@@ -214,15 +243,24 @@ class GameboyEmulator:
         self.input_manager.reset()
         self.frame_count = 0
         self.cycle_count = 0
+
+        # Reconnect frame callback after reset
+        self.ppu.set_frame_callback(self._on_frame_complete)
+        self.logger.info(f"Emulator reset - PPU callback reconnected: {self.ppu.frame_callback is not None}")
         self.logger.info("Emulator reset")
 
     def run_frame(self) -> bool:
         """Run one frame (70224 cycles for original Gameboy)."""
+        self.logger.debug(f"run_frame() called - running: {self.running}, paused: {self.paused}")
+
         if not self.running:
+            self.logger.debug("run_frame() returning False - not running")
             return False
 
         frame_cycles = 0
         target_cycles = 70224  # Cycles per frame
+
+        self.logger.debug(f"Starting frame execution - target: {target_cycles} cycles")
 
         while frame_cycles < target_cycles:
             if self.paused:
@@ -265,6 +303,7 @@ class GameboyEmulator:
             time.sleep(self.frame_duration - elapsed)
 
         self.last_frame_time = current_time
+        self.logger.debug(f"Frame completed: {self.frame_count}")
         return True
 
     def _handle_input(self):
@@ -278,8 +317,12 @@ class GameboyEmulator:
 
     def _on_frame_complete(self, frame_buffer):
         """Handle frame completion from PPU."""
+        self.logger.debug(f"Frame completed in emulator - frame_callback: {self.frame_callback}")
         if self.frame_callback:
             self.frame_callback(frame_buffer)
+            self.logger.debug("Frame callback executed")
+        else:
+            self.logger.debug("No frame callback set in emulator!")
 
     def run(self, max_frames: Optional[int] = None):
         """Run the emulator for specified number of frames or indefinitely."""
@@ -306,6 +349,8 @@ class GameboyEmulator:
 
     def resume(self):
         """Resume the emulator."""
+        self.logger.info(f"Emulator resume() called - current state: running={self.running}, paused={self.paused}")
+        self.running = True
         self.paused = False
         self.logger.info("Emulator resumed")
 
@@ -322,7 +367,9 @@ class GameboyEmulator:
             'paused': self.paused,
             'frame_count': self.frame_count,
             'cycle_count': self.cycle_count,
-            'cpu_registers': str(self.cpu.registers),
+            'pc': f"0x{self.cpu.registers.pc:04X}",
+            'sp': f"0x{self.cpu.registers.sp:04X}",
+            'a': f"0x{self.cpu.registers.a:02X}",
             'ime': self.cpu.ime,
             'halted': self.cpu.halted
         }
@@ -367,4 +414,5 @@ class GameboyEmulator:
 
     def set_frame_callback(self, callback):
         """Set callback for frame updates."""
+        self.logger.info(f"Setting frame callback: {callback}")
         self.frame_callback = callback
