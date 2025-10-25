@@ -1,0 +1,59 @@
+{
+    "python.defaultInterpreterPath": "./venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": [
+        "--line-length=100"
+    ],
+    "python.sortImports.args": [
+        "--profile",
+        "black"
+    ],
+    "python.linting.flake8Args": [
+        "--max-line-length=100",
+        "--extend-ignore=E203,W503"
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.completeFunctionParens": true,
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true,
+        "**/.mypy_cache": true,
+        "**/venv": true,
+        "**/.vscode": false
+    },
+    "files.watcherExclude": {
+        "**/__pycache__/**": true,
+        "**/venv/**": true,
+        "**/logs/**": true,
+        "**/screenshots/**": true
+    },
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    },
+    "editor.rulers": [
+        100
+    ],
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "emmet.includeLanguages": {
+        "python": "html"
+    },
+    "git.confirmSync": false,
+    "git.autofetch": true,
+    "debug.console.acceptSuggestionOnEnter": "on",
+    "debug.showBreakpointsInOverviewRuler": true,
+    "debug.showInlineBreakpointCandidates": true,
+    "terminal.integrated.scrollback": 10000,
+    "terminal.integrated.shell.linux": "/bin/bash",
+    "terminal.integrated.shell.osx": "/bin/zsh",
+    "workbench.tree.indent": 16,
+    "workbench.iconThemes": "vs-seti",
+    "extensions.ignoreRecommendations": false
+}
